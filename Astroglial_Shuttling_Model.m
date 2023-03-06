@@ -8,7 +8,7 @@ iStart      = 10;               % Time to start presynaptic stimulation; unit: s
 iStop       = 60;               % Time to stop presynaptic stimulation; unit: s;
 I_mag       = 10;               % Magnitude of external stimulus; unit: uA/cm^2
 freq        = 10;               % Presynaptic stimulation frequency; unit: Hz;
-dt          = 1e-5;             % Time step size; unit: s; Typically 10us(1e-5s);
+dt          = 1e-6;             % Time step size; unit: s; Typically 1us(1e-6s);
 t           = 0:dt:simTime;     % Time points
 steps       = simTime / dt;     % Number of time steps in simulation
 savePeriod  = 100;              % Save only every 100 time steps
@@ -16,7 +16,7 @@ resCount    = 1;                % Save result counter
 saveCount   = savePeriod;       % Save counter
 morph       = Model_Morphology; % Get cellular morphology
 % Synapse coverage
-synCov = 'c'; % Synapse coverage configuration (A,B,C)
+synCov = 'B'; % Synapse coverage configuration (A,B,C)
 switch synCov
     case {'A','a'}
         morph.ecsVol = morph.cleftVol;
@@ -41,7 +41,7 @@ preb4post   = 1; % Pre fires before post
 spDiff      = 2; % Difference between pre-post spikes; unit: ms
 V_ast_var   = 0; % Variable astrocyte membrane potential?
 ISI         = round((1/freq)/dt); % Interspike interval
-pulseWidth  = pulseWidth * 100; % Convert to same unit as dt; unit: 10us
+pulseWidth  = pulseWidth * 1000; % Convert to same unit as dt; unit: 1us
 % Constants
 zNa         = 1;
 zK          = 1;
@@ -96,7 +96,7 @@ I_stim      = 0;                % External stimulus
 I_stim_post = 0;
 Q = 0.01;
 R = 0;
-spDiff = spDiff * 100; % Convert to 10us (1 dt)
+spDiff = spDiff * 1000; % Convert to 1us (1 dt)
 [aM, bM]    = m_equations(V_pre, V0_pre);
 [aN, bN]    = n_equations(V_pre, V0_pre);
 [aH, bH]    = h_equations(V_pre, V0_pre);
@@ -106,22 +106,19 @@ xHH(2)      = (aN / (aN + bN));
 xHH(3)      = (aH / (aH + bH));
 xHH(4)      = m_inf;
 E_Ca        = Nernst_Potential(Ca_ecs, Ca_pre, zCa) * 1000;
-
-% if poissonFlag
-    rng(1); % seed random number generator
-    vt1 = rand(size(t));
-    spikes1 = (freq*dt) > vt1;%poisson
-    vt2 = rand(size(t));
-    spikes2 = (freq*dt) > vt2;%poisson
-% end
+rng(1); % seed random number generator
+vt1 = rand(size(t));
+spikes1 = (freq*dt) > vt1;%poisson
+vt2 = rand(size(t));
+spikes2 = (freq*dt) > vt2;%poisson
 %% Presimulation setup
 tic; % Start stopwatch timer
 
 for i=1:10000
     %% Presynaptic neuron
     % Active currents
-    [V_pre,xHH,INa_vg,IK_vg,ICa_vg,~] = ... 
-        Neuron_Model(V_pre, V0_pre, xHH, dt, I_stim,I_pre,E_Ca); % AP
+    [V_pre,xHH,INa_vg,IK_vg,ICa_vg] = ... 
+        Neuron_Model(V_pre, V0_pre, xHH, dt, I_stim,E_Ca); % AP
     [INa_nka_pre,IK_nka_pre] = NKA(K_ecs,Na_pre,0); % NKA
     [ICa_pm_pre] = PMCA(Ca_pre); % PMCA 
     % Total currents
@@ -211,7 +208,6 @@ for i = 1 : steps
     if (i >= Start_App && i <= Stop_App) % Single stimulus
         if poissonFlag
             I_stim = I_mag*100*spikes1(i);
-%             I_stim_post = I_mag*spikes2(i-spDiff)*5;
             if preb4post
                 I_stim_post = I_mag*spikes2(i-spDiff)*5;
             else
@@ -219,7 +215,6 @@ for i = 1 : steps
             end
         else
             I_stim = I_mag*(mod(i-1,ISI)<=pulseWidth); % External stimulus magnitude
-%             I_stim_post = I_mag*spikes2(i)*5;
             if preb4post
                 I_stim_post = I_mag*(mod(i-spDiff,ISI)<=pulseWidth)/30;
             else
@@ -231,9 +226,9 @@ for i = 1 : steps
     end
     %% Presynaptic neuron
     % Active currents
-    E_Ca = Nernst_Potential(Ca_ecs, Ca_pre, zCa) * 1000;
-    [V_pre,xHH,INa_vg,IK_vg,ICa_vg,~] = ... 
-        Neuron_Model(V_pre, V0_pre, xHH, dt, I_stim,I_pre,E_Ca);
+    E_Ca = Nernst_Potential(Ca_ecs, Ca_pre, zCa) * 1000; % Ca reversal potential (mV)
+    [V_pre,xHH,INa_vg,IK_vg,ICa_vg] = ... 
+        Neuron_Model(V_pre, V0_pre, xHH, dt, I_stim,E_Ca);
     [INa_nka_pre,IK_nka_pre] = NKA(K_ecs,Na_pre,0); % NKA
     [ICa_pm_pre] = PMCA(Ca_pre); % PMCA
     % Leak currents
@@ -360,7 +355,6 @@ for i = 1 : steps
     INa_ecs         = INa_dif_ecs - INa_psc - INa_post - INa_pre;
     IK_ecs          = IK_dif_ecs - IK_psc - IK_post - IK_pre;
     ICa_ecs         = ICa_dif_ecs - ICa_psc - ICa_pre - ICa_post;
-%     ICa_ecs         = ICa_dif_ecs - ICa_psc - ICa_pre;%increase NMDA 10/02/22
     %% Convert currents to fluxes
     % Presynapse
 %     JNa_pre         = -INa_pre * (1 / (zNa*F*morph.volSyn));
@@ -386,7 +380,7 @@ for i = 1 : steps
     % Postsynapse
 %     Na_post         = Na_post + (dt * JNa_post);
 %     K_post          = K_post + (dt * JK_post);
-%     Ca_post         = Ca_post + (dt * JCa_post);%increase NMDA 10/02/22
+    Ca_post         = Ca_post + (dt * JCa_post);
     nmdar           = nmdar + (dt * nmda_dr); % NMDA activation
     ampar           = ampar + (dt * ampa_dr); % AMPA activation
     % Astrocyte
@@ -669,19 +663,31 @@ storage.ICa_dif_ecs = temp;
 storage.glu_rel     = temp;
 storage.prob_rel    = temp;
 end
-function [dV,x,INa,IK,ICa,Glu] = Neuron_Model(V,Vrest,x,dt,Iext,I,E_Ca)
+function [dV,x,INa,IK,ICa] = Neuron_Model(V,Vrest,x,dt,Iext,E_Ca)
+%Neuron_Model Calculates neuronal membrane currents using the HH model
+%Input:
+%   V - Membrane potential (V)
+%   Vrest - Resting membrane potential (V)
+%   x - Receptor activation
+%   dt - Time step (s)
+%   Iext - External stimulus (uA/cm^2)
+%   E_Ca - Calcium reversal potential (mV)
+%Output:
+%   dV - Change in membrane potential (V)
+%   x - Receptor activation
+%   INa - Na current density (A/m^2)
+%   IK - K current density (A/m^2)
+%   ICa - Ca current density (A/m^2)
+
 % Params
-mult = 1000;
+mult = 1000; % Conversion factor from unit to milli-unit
 conv = 1e-2; % Conversion factor from uA/cm^2 to A/m^2
 V = V * mult; % Convert voltage to mV
 Vrest = Vrest * mult; % Convert voltage to mV
 dt = dt * mult; % Convert dt to ms
-I = I / conv;% convert I to uA/cm^2
 % constants
 C = 1; % uF/cm^2
 E_Na = 115 + Vrest; % mV
-% E_Ca = 137;
-% E_Ca = E(3);
 E_K = -12 + Vrest; %mV
 E_Leak = 10.6 + Vrest; % mV
 g_Na = 120; % mS/cm^2
@@ -702,7 +708,6 @@ INa = gNa*(V-E_Na);
 IK = gK*(V-E_K);
 ICa = gCa*(V-E_Ca);
 ILeak = g_Leak*(V-E_Leak);
-% Ionic = Iext - (INa+IK+ILeak+ICa+I);
 Ionic = Iext - (INa+IK+ILeak+ICa);
 % Calculate new membrane potential
 dV = V + dt * Ionic * (1/C);
@@ -711,8 +716,6 @@ x(1) = x(1) + (alphaM *(1-x(1)) - betaM * x(1))*dt;
 x(2) = x(2) + (alphaN *(1-x(2)) - betaN * x(2))*dt;
 x(3) = x(3) + (alphaH *(1-x(3)) - betaH * x(3))*dt;
 x(4) = x(4) + ((m_inf - x(4))/tau_m) * dt;
-% Get glutamate concentration
-Glu = Trans_Rel(V);
 % Conversions
 dV = dV / mult; % to V
 INa = INa * conv * 1e-2; % to A/m^2
@@ -735,6 +738,13 @@ a_h = 0.07*exp((Vrest-V)/20);
 b_h = 1/(1+exp(3-0.1*(V-Vrest)));
 end
 function [m_inf, tau_m] = mca_equations(V)
+%mca_equations Find activation of VGCC
+%Input:
+%   V - Membrane potential (V)
+%Output:
+%   m_inf - Activation steady-state
+%   tau_m - Activation time 
+
 m_inf = 1 / (1 + exp(-((V+24.758)/8.429)));
 if V >= -40
     tau_m = 0.2702+1.1622*exp(-(V+22.098)^2/164.19);
@@ -742,28 +752,12 @@ else
     tau_m = 0.6923*exp((V-4.7)/1089.372);
 end
 end
-function [Trans]        = Trans_Rel(Vpre)
-%TRANS_REL Function relating presynaptic voltage with neurotransmitter
-%release
-% Ref: Synthesis of Models for Excitable Membranes, Synaptic Transmission..
-%      by Destexhe, Mainen and Sejnowski (1994)
-%Input:
-%   Vpre - Presynaptic membrane potential
-%Output:
-%   Trans - Neurotransmitter concentration
-
-% Params
-Tmax = 1e-3; % Maximal transmitter concentration; unit: M
-Vp = 2e-6; % Value when half-activation reached; unit: V
-Kp = 5e-6; % Slope or steepness; unit: V
-% Equation
-Trans = Tmax / (1 + exp(-(Vpre-Vp)/Kp));
-end
 function [INa,IK]       = NKA(Kout,Nain,astrocyte)
 %NKA Find current density through NKA
 %Input:
 %   Kout - Extracellular K concentration
 %   Nain - Intracellular Na concentration
+%   astrocyte - Boolean flag to denote if astrocyte or not
 %Output:
 %   INa - Na current density
 %   IK - K current density
@@ -1002,39 +996,52 @@ INMDA = g * r * (V-E_NMDA) * Mg_V;
 ICa = INMDA;
 INa = 1*INMDA;
 IK = -1*INMDA;
-
-% INa = 0;
-% ICa = 0;
 end
 function [INa, IK]      = EAAT2(Glu)
+%EAAT2 Calculates EAAT2 current density
+%Input:
+%   Glu - Extracellular glu concentration
+%Output:
+%   INa - Na current density
+%   IK - K current density
+
 dens=10000*1e-12;%EAAT2 density; per m^2 (10,000 per um^2)
 eff=0.5;%EAAT2 efficacy
 n=1;%binding sites
-F = 96485.33;% Faradays constant; unit: C/mol;
-V=30*dens*eff;%max velocity; unit: mol/m^2s
-km=20e-6;%concentration half v is reached (accounting for efficacy)
+F=96485.33;% Faradays constant; unit: C/mol;
+V=30*dens*eff;%max velocity (accounting for efficacy); unit: mol/m^2s
+km=20e-6;%concentration half v is reached; unit: M
+gx=7;%conductance multiplier
 
 dv=V*(Glu^n/(km^n+Glu^n));%MM
-I=dv*F;%current
-
-% g=1;%conductance of single EAAT2
-% g_max=dens*g;%maximal conductance
-% I=dv*g_max*F*eff;%current
+I=dv*F*gx;%current
 
 INa=-3*I;%3Na in
 IK=I;%1K out
 end
 function [Glu,Q,R]      = Glu_Rel_Ca(Ca,Glu,Q,R,dt)
+%Glu_Rel_Ca Calculates Glu release based on Ca concentration
+%Input:
+%   Ca - Intracellular Ca concentration (M)
+%   Glu - Extracellular glu concentration (M)
+%   Q - Activated vesicle (mM)
+%   R - Release rate (ms^-1)             
+%   dt - Time step (s)
+%Output:
+%   Glu - Glu release concentration (M)
+%   Q - Activated vesicle (mM)
+%   R - Release rate (ms^-1)
+
 %params
-k1 = 0.5;%per ms
-k_1 = 1;%per ms
-k2 = 1;
-k3 = 10;%per ms
-kT = 5;%per ms
-Tmax = 40;%mM (concentration per vesicle)
-n = 4;%binding sites
-Ca_rest=50e-9;
-Ca = (Ca-Ca_rest)*1e6;%convert Ca to uM
+k1 = 0.5;% activation rate (ms^-1)
+k_1 = 1;% inactivation rate (ms^-1)
+k2 = 1;% release activation rate (ms^-1.M^3)
+k3 = 10;% release inactivation rate (ms^-1)
+kT = 5;% transmitter decay rate (ms^-1)
+Tmax = 40;% concentration per vesicle (mM)
+n = 4;% binding sites for Ca
+Ca_rest=50e-9;% resting Ca (M)
+Ca = (Ca-Ca_rest)*1e6;%convert Ca to uM (minus the resting concentration)
 dt = dt*1e3;%convert dt to ms 
 Glu = Glu*1e3;%convert Glu to mM
 
@@ -1067,9 +1074,9 @@ uM = 1e6;
 nM = 1e9;
 fA = 1e15;
 yLabel = 'I (fA)';
-insLen = 100; %inset length; unit: ms
+insLen = 1000; %inset length; unit: ms
 
-ds = (iStop*1000) -insLen; %inset start
+ds = (iStop*10000) -insLen; %inset start
 de = ds+1+insLen; % inset end
 xTick = [59.9 60];
 
