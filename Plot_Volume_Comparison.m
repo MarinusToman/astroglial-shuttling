@@ -1,9 +1,9 @@
 close all;
 clear all variables;
 
-fileSml = 'Astro_Shuttling_Model_SynCovA_bAP_10Hz_22_Feb_2022_17_13_02.fig';
-fileNml = 'Astro_Shuttling_Model_SynCovB_bAP_10Hz_22_Feb_2022_13_02_18.fig';
-fileBig = 'Astro_Shuttling_Model_SynCovC_bAP_10Hz_22_Feb_2022_17_27_07.fig';
+fileSml = 'Astro_Shuttling_Model_SynCovA_10Hz_23_Jan_2023.fig';
+fileNml = 'Astro_Shuttling_Model_SynCovB_10Hz_23_Jan_2023.fig';
+fileBig = 'Astro_Shuttling_Model_SynCovC_10Hz_23_Jan_2023.fig';
 
 %% Small volume
 figSmall = openfig(fileSml);% get figure handle
